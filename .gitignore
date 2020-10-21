@@ -88,3 +88,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+#terraform
+*.tfvars
+.terraform
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfvars
+.terraform.tfstate.lock.info
