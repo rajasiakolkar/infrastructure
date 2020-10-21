@@ -26,9 +26,6 @@ variable "db_allocated_storage" {
 variable "db_engine" {
     type = string
 }
-variable "db_engine_version" {
-    type = number
-}
 variable "db_instance" {
     type = string
 }
@@ -108,9 +105,6 @@ variable "delete_on_termination" {
     type = string
 }
 variable "device_name" {
-    type = string
-}
-variable "aws_db_endpoint" {
     type = string
 }
 

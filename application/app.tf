@@ -15,7 +15,6 @@ resource "aws_security_group" "application" {
     to_port         = 22
     protocol        = "${var.aws_security_group_protocol}"
     cidr_blocks     = ["0.0.0.0/0"]
-    #cidr_blocks values??
   }
 
   ingress {
@@ -38,6 +37,13 @@ resource "aws_security_group" "application" {
     protocol        = "${var.aws_security_group_protocol}"
     cidr_blocks     = ["0.0.0.0/0"]
   }
+
+  egress {
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
 }
 
 resource "aws_security_group" "database" {
@@ -47,14 +53,13 @@ resource "aws_security_group" "database" {
 }
 
 resource "aws_security_group_rule" "database_rule" {
-  from_port                     = 5432
-  to_port                       = 5432
-  protocol                      = "${var.aws_security_group_protocol}"
-  type                          = "ingress"
-  source_security_group_id      = "${aws_security_group.application.id}"
-  security_group_id             = "${aws_security_group.database.id}"
+   from_port                     = 5432
+   to_port                       = 5432
+   protocol                      = "${var.aws_security_group_protocol}"
+   type                          = "ingress"
+   source_security_group_id      = "${aws_security_group.application.id}"
+   security_group_id             = "${aws_security_group.database.id}"
 }
-
 
 
 resource "aws_dynamodb_table" "dynamoDB_Table" {
@@ -78,9 +83,14 @@ data "aws_subnet_ids" "subnet" {
     vpc_id = "${var.vpc_id}"
 }
 
+data "aws_ami" "ami" {
+    most_recent = true
+    owners = ["self"]
+}
+
 
 resource "aws_instance" "ec2_instance" {
-  ami                       = "${var.ami}"
+  ami                       = "${data.aws_ami.ami.id}"
   instance_type             = "${var.instance_type}"
   disable_api_termination   = "${var.disable_api_termination}"
   availability_zone         = "${data.aws_availability_zones.available.names[1]}"
@@ -103,7 +113,6 @@ resource "aws_instance" "ec2_instance" {
   source_dest_check           = false
   subnet_id                   = "${element(tolist(data.aws_subnet_ids.subnet.ids), 0)}"
   depends_on                  = [aws_db_instance.my_rds,aws_s3_bucket.my_s3_bucket]
-  #depends_on                  = [aws_s3_bucket.my_s3_bucket]
   user_data                   = "${templatefile("user_data.sh",
                                       {
                                         s3_bucket_name  = "${var.s3_bucket}",
@@ -209,7 +218,6 @@ resource "aws_db_instance" "my_rds" {
   name                  = "${var.db_name}"
   allocated_storage     = "${var.db_allocated_storage}"
   engine                = "${var.db_engine}"
-  engine_version        = "${var.db_engine_version}"
   instance_class        = "${var.db_instance}"
   multi_az              = "${var.db_multi_az}"
   identifier            = "${var.db_identifier}"
@@ -223,7 +231,7 @@ resource "aws_db_instance" "my_rds" {
 
 resource "aws_db_subnet_group" "rds-subnet" {
   name              = "rds-subnet"
-  subnet_ids        =  ["${element(tolist(data.aws_subnet_ids.subnet.ids), 0)}","${element(tolist(data.aws_subnet_ids.subnet.ids), 1)}"]
+  subnet_ids        =  ["${element(tolist(data.aws_subnet_ids.subnet.ids), 0)}","${element(tolist(data.aws_subnet_ids.subnet.ids), 1)}","${element(tolist(data.aws_subnet_ids.subnet.ids), 2)}"]
 }
 
 resource "aws_s3_bucket_public_access_block" "aws_s3_block" {
