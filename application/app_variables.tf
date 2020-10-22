@@ -8,9 +8,6 @@ variable "region" {
 variable "SGApplication" {
     type = string
 }
-variable "vpc_id" {
-    type = string
-}
 variable "aws_security_group_protocol" {
     type = string
 }
@@ -59,9 +56,6 @@ variable "dynamoDB_writeCapacity" {
 variable "dynamoDB_readCapacity" {
     type = number
 }
-variable "ami" {
-    type = string
-}
 variable "instance_type" {
     type = string
 }
@@ -105,6 +99,27 @@ variable "delete_on_termination" {
     type = string
 }
 variable "device_name" {
+    type = string
+}
+variable "most_recent" {
+    type = string
+}
+variable "dev_id" {
+    type = string
+}
+variable "vpcName" {
+    type = string
+}
+variable "vpcCIDRblock" {
+    type = string
+}
+variable "subnetCIDRblock1" {
+    type = string
+}
+variable "subnetCIDRblock2" {
+    type = string
+}
+variable "subnetCIDRblock3" {
     type = string
 }
 
