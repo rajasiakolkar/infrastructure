@@ -5,10 +5,99 @@ provider "aws" {
   region = "${var.region}"
 }
 
+
+# create the VPC
+resource "aws_vpc" "My_VPC" {
+  cidr_block           = var.vpcCIDRblock
+  enable_dns_hostnames = "true"
+  enable_dns_support   = "true"
+tags = {
+    Name = "${var.vpcName}"
+}
+}
+# end resource
+
+# create the Subnet
+
+resource "aws_subnet" "My_VPC_Subnet1" {
+  vpc_id                  = "${aws_vpc.My_VPC.id}"
+  cidr_block              = var.subnetCIDRblock1
+  availability_zone       = "us-east-1a"
+tags = {
+   Name = "${var.vpcName}-1"
+}
+}
+
+resource "aws_subnet" "My_VPC_Subnet2" {
+  vpc_id                  = "${aws_vpc.My_VPC.id}"
+  cidr_block              = var.subnetCIDRblock2
+  availability_zone       = "us-east-1b"
+tags = {
+   Name = "${var.vpcName}-2"
+}
+}
+
+resource "aws_subnet" "My_VPC_Subnet3" {
+  vpc_id                  = "${aws_vpc.My_VPC.id}"
+  cidr_block              = var.subnetCIDRblock3
+  availability_zone       = "us-east-1c"
+tags = {
+   Name = "${var.vpcName}-3"
+}
+}
+# end resource
+
+
+# Create the Internet Gateway
+resource "aws_internet_gateway" "My_VPC_GW" {
+ vpc_id = "${aws_vpc.My_VPC.id}"
+ tags = {
+        Name = "${var.vpcName}-Internet Gateway"
+}
+}
+# end resource
+
+# Create the Route Table
+resource "aws_route_table" "My_VPC_route_table" {
+ vpc_id = "${aws_vpc.My_VPC.id}"
+ tags = {
+        Name = "${var.vpcName}-Route Table"
+}
+}
+# end resource
+
+# Create the Internet Access
+resource "aws_route" "My_VPC_internet_access" {
+  route_table_id         = "${aws_route_table.My_VPC_route_table.id}"
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id = "${aws_internet_gateway.My_VPC_GW.id}"
+}
+# end resource
+
+
+# Associate the Route Table with the Subnet
+resource "aws_route_table_association" "My_VPC_association1" {
+  subnet_id      = "${aws_subnet.My_VPC_Subnet1.id}"
+  route_table_id = "${aws_route_table.My_VPC_route_table.id}"
+} # end resource
+
+# Associate the Route Table with the Subnet
+resource "aws_route_table_association" "My_VPC_association2" {
+  subnet_id      = "${aws_subnet.My_VPC_Subnet2.id}"
+  route_table_id = "${aws_route_table.My_VPC_route_table.id}"
+} # end resource
+
+# Associate the Route Table with the Subnet
+resource "aws_route_table_association" "My_VPC_association3" {
+  subnet_id      = "${aws_subnet.My_VPC_Subnet3.id}"
+  route_table_id = "${aws_route_table.My_VPC_route_table.id}"
+} # end resource
+
+
 resource "aws_security_group" "application" {
   name              = "${var.SGApplication}"
   description       = "Security Group to host web application"
-  vpc_id            = "${var.vpc_id}"
+  vpc_id            = "${aws_vpc.My_VPC.id}"
 
   ingress {
     from_port       = 22
@@ -49,7 +138,7 @@ resource "aws_security_group" "application" {
 resource "aws_security_group" "database" {
   name              = "${var.SGDatabase}"
   description       = "Security Group for database"
-  vpc_id            = "${var.vpc_id}"
+  vpc_id            = "${aws_vpc.My_VPC.id}"
 }
 
 resource "aws_security_group_rule" "database_rule" {
@@ -79,21 +168,16 @@ data "aws_availability_zones" "available" {
     state = "available"
 }
 
-data "aws_subnet_ids" "subnet" {
-    vpc_id = "${var.vpc_id}"
-}
-
 data "aws_ami" "ami" {
-    most_recent = true
-    owners = ["self"]
+    most_recent = "${var.most_recent}"
+    owners = ["${var.dev_id}"]
 }
-
 
 resource "aws_instance" "ec2_instance" {
   ami                       = "${data.aws_ami.ami.id}"
   instance_type             = "${var.instance_type}"
   disable_api_termination   = "${var.disable_api_termination}"
-  availability_zone         = "${data.aws_availability_zones.available.names[1]}"
+  availability_zone         = "${data.aws_availability_zones.available.names[0]}"
   key_name                  = "${var.key_name}"
   iam_instance_profile      = "${aws_iam_instance_profile.my_iam_instance_profile.name}"
 
@@ -111,8 +195,8 @@ resource "aws_instance" "ec2_instance" {
   vpc_security_group_ids      = ["${aws_security_group.application.id}"]
   associate_public_ip_address = true
   source_dest_check           = false
-  subnet_id                   = "${element(tolist(data.aws_subnet_ids.subnet.ids), 0)}"
-  depends_on                  = [aws_db_instance.my_rds,aws_s3_bucket.my_s3_bucket]
+  subnet_id                    = "${aws_subnet.My_VPC_Subnet1.id}"
+  depends_on                  = [aws_db_instance.my_rds,aws_s3_bucket.my_s3_bucket,aws_vpc.My_VPC,aws_subnet.My_VPC_Subnet1,aws_subnet.My_VPC_Subnet2,aws_subnet.My_VPC_Subnet3]
   user_data                   = "${templatefile("user_data.sh",
                                       {
                                         s3_bucket_name  = "${var.s3_bucket}",
@@ -231,7 +315,7 @@ resource "aws_db_instance" "my_rds" {
 
 resource "aws_db_subnet_group" "rds-subnet" {
   name              = "rds-subnet"
-  subnet_ids        =  ["${element(tolist(data.aws_subnet_ids.subnet.ids), 0)}","${element(tolist(data.aws_subnet_ids.subnet.ids), 1)}","${element(tolist(data.aws_subnet_ids.subnet.ids), 2)}"]
+  subnet_ids        = ["${aws_subnet.My_VPC_Subnet1.id}","${aws_subnet.My_VPC_Subnet2.id}","${aws_subnet.My_VPC_Subnet3.id}"]
 }
 
 resource "aws_s3_bucket_public_access_block" "aws_s3_block" {
@@ -242,7 +326,6 @@ resource "aws_s3_bucket_public_access_block" "aws_s3_block" {
   restrict_public_buckets = true
   ignore_public_acls = true
 }
-
 
 
 
