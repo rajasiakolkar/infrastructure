@@ -122,5 +122,35 @@ variable "subnetCIDRblock2" {
 variable "subnetCIDRblock3" {
     type = string
 }
+variable "application_name" {
+    type = string
+}
+variable "compute_platform" {
+    type = string
+}
+variable "iam_policy_name" {
+    type = string
+}
+variable "iam_username" {
+    type = string
+}
+variable "GH_Upload_To_S3_policy_name" {
+    type = string
+}
+variable "codeDeployBucket" {
+    type = string
+}
+variable "GH_Code_Deploy_policy_name" {
+    type = string
+}
+variable "CodeDeploy_EC2_S3_policy_name" {
+    type = string
+}
+variable "code_deploy_ec2_service_role_name" {
+    type = string
+}
+variable "account_id" {
+    type = string
+}
 
 # end of variables.tf
