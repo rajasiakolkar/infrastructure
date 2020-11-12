@@ -587,3 +587,9 @@ resource "aws_route53_record" "dns_record" {
   ttl     = "60"
   records = ["${aws_instance.ec2_instance.public_ip}"]
 }
+
+resource "aws_iam_role_policy_attachment" "CodeDeployEC2ServiceRole_CloudWatch_policy_attach" {
+  role       = "${aws_iam_role.CodeDeployEC2ServiceRole.name}"
+  depends_on = ["aws_iam_role.CodeDeployEC2ServiceRole"]
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
