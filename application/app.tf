@@ -117,6 +117,7 @@ resource "aws_security_group" "application" {
     from_port       = 443
     to_port         = 443
     protocol        = "${var.aws_security_group_protocol}"
+    security_groups = ["${aws_security_group.load_balancer_sg.id}"]
     cidr_blocks     = ["0.0.0.0/0"]
   }
 
@@ -572,6 +573,14 @@ resource "aws_codedeploy_deployment_group" "csye6225-webapp-deployment" {
   auto_rollback_configuration {
     enabled = false
   }
+
+  load_balancer_info {
+    target_group_info {
+      name  = "${aws_lb_target_group.auto_scale_target_group.name}"
+    }
+  }
+  autoscaling_groups = ["${aws_autoscaling_group.auto_scale.name}"]
+
 }
 
 data "aws_route53_zone" "selected" {
@@ -584,12 +593,214 @@ resource "aws_route53_record" "dns_record" {
   allow_overwrite = true
   name    = "api.${data.aws_route53_zone.selected.name}"
   type    = "A"
-  ttl     = "60"
-  records = ["${aws_instance.ec2_instance.public_ip}"]
+  #ttl     = "60"
+  #records = ["${aws_instance.ec2_instance.public_ip}"]
+
+  alias {
+    name                   = "${aws_lb.application_lb.dns_name}"
+    zone_id                = "${aws_lb.application_lb.zone_id}"
+    evaluate_target_health = false
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "CodeDeployEC2ServiceRole_CloudWatch_policy_attach" {
   role       = "${aws_iam_role.CodeDeployEC2ServiceRole.name}"
   depends_on = ["aws_iam_role.CodeDeployEC2ServiceRole"]
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+resource "aws_launch_configuration" "config_for_auto_scaling" {
+  name_prefix                       = "asg-launch-config"
+  image_id                          = "${data.aws_ami.ami.id}"
+  instance_type                     = "t2.micro"
+  key_name                          = "${var.key_name}"
+  associate_public_ip_address       = true
+  user_data                         = "${templatefile("/user_data.sh",
+                                      {
+                                        s3_bucket_name  = "${aws_s3_bucket.my_s3_bucket.id}",
+                                        aws_db_endpoint = "${aws_db_instance.my_rds.endpoint}",
+                                        aws_db_name     = "${aws_db_instance.my_rds.name}",
+                                        aws_db_username = "${aws_db_instance.my_rds.username}",
+                                        aws_db_password = "${aws_db_instance.my_rds.password}",
+                                        aws_region      = "${var.region}",
+                                        aws_profile     = "${var.profile}"
+                                      })}"
+  iam_instance_profile              = "${aws_iam_instance_profile.my_iam_instance_profile.name}"
+  security_groups                   = ["${aws_security_group.application.id}"]
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  ebs_block_device {
+    device_name               = "${var.device_name}"
+    volume_size               = "${var.volume_size}"
+    volume_type               = "${var.volume_type}"
+    delete_on_termination     = "${var.delete_on_termination}"
+  }
+}
+
+resource "aws_autoscaling_group" "auto_scale" {
+  name                            = "auto_scale"
+  default_cooldown                = "60"
+  launch_configuration            = "${aws_launch_configuration.config_for_auto_scaling.name}"
+  min_size                        = "3"
+  max_size                        = "5"
+  desired_capacity                = "3"
+  vpc_zone_identifier             = ["${aws_subnet.My_VPC_Subnet1.id}","${aws_subnet.My_VPC_Subnet2.id}","${aws_subnet.My_VPC_Subnet3.id}"]
+  target_group_arns               = ["${aws_lb_target_group.auto_scale_target_group.arn}"]
+  force_delete                    = true
+
+  tag {
+    key                 = "Name"
+    value               = "EC2_for_web"
+    propagate_at_launch = "true"
+  }
+
+
+  depends_on = ["aws_launch_configuration.config_for_auto_scaling",
+    "aws_lb_target_group.auto_scale_target_group",
+    "aws_lb_listener.application_listener",
+    "aws_lb_listener.http_listener"]
+}
+
+resource "aws_lb_target_group" "auto_scale_target_group" {
+  name     = "auto-scale-target-group"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id            = "${aws_vpc.My_VPC.id}"
+}
+
+resource "aws_autoscaling_policy" "scale_up_policy" {
+  name                   = "scale_up_policy"
+  scaling_adjustment     = "1"
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = "60"
+  autoscaling_group_name = "${aws_autoscaling_group.auto_scale.name}"
+}
+
+resource "aws_autoscaling_policy" "scale_down_policy" {
+  name                   = "scale_down_policy"
+  scaling_adjustment     = "-1"
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = "60"
+  autoscaling_group_name = "${aws_autoscaling_group.auto_scale.name}"
+}
+
+resource "aws_cloudwatch_metric_alarm" "CPUAlarmHigh" {
+  alarm_name          = "CPUAlarmHigh"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "90"
+  dimensions = {
+    AutoScalingGroupName = "${aws_autoscaling_group.auto_scale.name}"
+  }
+  alarm_description   = "Monitor EC2 cpu utilization"
+  alarm_actions       = ["${aws_autoscaling_policy.scale_up_policy.arn}"]
+}
+
+
+resource "aws_cloudwatch_metric_alarm" "CPUAlarmLow" {
+  alarm_name          = "CPUAlarmLow"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "70"
+  dimensions = {
+    AutoScalingGroupName = "${aws_autoscaling_group.auto_scale.name}"
+  }
+  alarm_description   = "Monitor EC2 cpu utilization"
+  alarm_actions       = ["${aws_autoscaling_policy.scale_down_policy.arn}"]
+}
+
+resource "aws_lb" "application_lb" {
+  name               = "application-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = ["${aws_security_group.load_balancer_sg.id}"]
+  subnets            = ["${aws_subnet.My_VPC_Subnet1.id}","${aws_subnet.My_VPC_Subnet2.id}","${aws_subnet.My_VPC_Subnet3.id}"]
+  ip_address_type    = "ipv4"
+  enable_deletion_protection = false
+}
+
+
+data "aws_acm_certificate" "ssl_certificate" {
+  domain   = "${var.domain}"
+  statuses = ["ISSUED"]
+  most_recent = true
+}
+
+
+resource "aws_lb_listener" "application_listener" {
+  load_balancer_arn = "${aws_lb.application_lb.arn}"
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = "${data.aws_acm_certificate.ssl_certificate.arn}"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = "${aws_lb_target_group.auto_scale_target_group.arn}"
+  }
+}
+
+
+resource "aws_lb_listener" "http_listener" {
+  load_balancer_arn = "${aws_lb.application_lb.arn}"
+  port = "80"
+  protocol = "HTTP"
+
+  default_action {
+    type = "forward"
+    target_group_arn = "${aws_lb_target_group.auto_scale_target_group.arn}"
+  }
+}
+
+resource "aws_security_group" "load_balancer_sg" {
+  name              = "load_balancer_sg"
+  description       = "Security group for load balancer"
+  vpc_id            = "${aws_vpc.My_VPC.id}"
+
+  ingress {
+    from_port       = 22
+    to_port         = 22
+    protocol        = "${var.aws_security_group_protocol}"
+    cidr_blocks     = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port       = 80
+    to_port         = 80
+    protocol        = "${var.aws_security_group_protocol}"
+    cidr_blocks     = ["0.0.0.0/0"]
+  }
+
+  # HTTPS
+  ingress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "${var.aws_security_group_protocol}"
+    cidr_blocks     = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "${var.aws_security_group_protocol}"
+    cidr_blocks     = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
 }
