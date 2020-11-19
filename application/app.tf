@@ -5,7 +5,6 @@ provider "aws" {
   region = "${var.region}"
 }
 
-
 # create the VPC
 resource "aws_vpc" "My_VPC" {
   cidr_block           = var.vpcCIDRblock
@@ -103,6 +102,7 @@ resource "aws_security_group" "application" {
     from_port       = 22
     to_port         = 22
     protocol        = "${var.aws_security_group_protocol}"
+    security_groups = ["${aws_security_group.load_balancer_sg.id}"]
     cidr_blocks     = ["0.0.0.0/0"]
   }
 
@@ -110,6 +110,7 @@ resource "aws_security_group" "application" {
     from_port       = 80
     to_port         = 80
     protocol        = "${var.aws_security_group_protocol}"
+    security_groups = ["${aws_security_group.load_balancer_sg.id}"]
     cidr_blocks     = ["0.0.0.0/0"]
   }
 
@@ -125,6 +126,7 @@ resource "aws_security_group" "application" {
     from_port       = 8080
     to_port         = 8080
     protocol        = "${var.aws_security_group_protocol}"
+    security_groups = ["${aws_security_group.load_balancer_sg.id}"]
     cidr_blocks     = ["0.0.0.0/0"]
   }
 
@@ -174,41 +176,41 @@ data "aws_ami" "ami" {
     owners = ["${var.dev_id}"]
 }
 
-resource "aws_instance" "ec2_instance" {
-  ami                       = "${data.aws_ami.ami.id}"
-  instance_type             = "${var.instance_type}"
-  disable_api_termination   = "${var.disable_api_termination}"
-  availability_zone         = "${data.aws_availability_zones.available.names[0]}"
-  key_name                  = "${var.key_name}"
-  iam_instance_profile      = "${aws_iam_instance_profile.my_iam_instance_profile.name}"
-
-  ebs_block_device {
-    device_name               = "${var.device_name}"
-    volume_size               = "${var.volume_size}"
-    volume_type               = "${var.volume_type}"
-    delete_on_termination     = "${var.delete_on_termination}"
-  }
-
-  tags = {
-    Name = "EC2_for_web"
-  }
-
-  vpc_security_group_ids      = ["${aws_security_group.application.id}"]
-  associate_public_ip_address = true
-  source_dest_check           = false
-  subnet_id                    = "${aws_subnet.My_VPC_Subnet1.id}"
-  depends_on                  = [aws_db_instance.my_rds,aws_s3_bucket.my_s3_bucket,aws_vpc.My_VPC,aws_subnet.My_VPC_Subnet1,aws_subnet.My_VPC_Subnet2,aws_subnet.My_VPC_Subnet3]
-  user_data                   = "${templatefile("user_data.sh",
-                                      {
-                                        s3_bucket_name  = "${var.s3_bucket}",
-                                        aws_db_endpoint = "${aws_db_instance.my_rds.endpoint}",
-                                        aws_db_name     = "${aws_db_instance.my_rds.name}",
-                                        aws_db_username = "${aws_db_instance.my_rds.username}",
-                                        aws_db_password = "${aws_db_instance.my_rds.password}",
-                                        aws_region      = "${var.region}",
-                                        aws_profile     = "${var.profile}"
-                                      })}"
-}
+//resource "aws_instance" "ec2_instance" {
+//  ami                       = "${data.aws_ami.ami.id}"
+//  instance_type             = "${var.instance_type}"
+//  disable_api_termination   = "${var.disable_api_termination}"
+//  availability_zone         = "${data.aws_availability_zones.available.names[0]}"
+//  key_name                  = "${var.key_name}"
+//  iam_instance_profile      = "${aws_iam_instance_profile.my_iam_instance_profile.name}"
+//
+//  ebs_block_device {
+//    device_name               = "${var.device_name}"
+//    volume_size               = "${var.volume_size}"
+//    volume_type               = "${var.volume_type}"
+//    delete_on_termination     = "${var.delete_on_termination}"
+//  }
+//
+//  tags = {
+//    Name = "EC2_for_web"
+//  }
+//
+//  vpc_security_group_ids      = ["${aws_security_group.application.id}"]
+//  associate_public_ip_address = true
+//  source_dest_check           = false
+//  subnet_id                    = "${aws_subnet.My_VPC_Subnet1.id}"
+//  depends_on                  = [aws_db_instance.my_rds,aws_s3_bucket.my_s3_bucket,aws_vpc.My_VPC,aws_subnet.My_VPC_Subnet1,aws_subnet.My_VPC_Subnet2,aws_subnet.My_VPC_Subnet3]
+//  user_data                   = "${templatefile("user_data.sh",
+//                                      {
+//                                        s3_bucket_name  = "${var.s3_bucket}",
+//                                        aws_db_endpoint = "${aws_db_instance.my_rds.endpoint}",
+//                                        aws_db_name     = "${aws_db_instance.my_rds.name}",
+//                                        aws_db_username = "${aws_db_instance.my_rds.username}",
+//                                        aws_db_password = "${aws_db_instance.my_rds.password}",
+//                                        aws_region      = "${var.region}",
+//                                        aws_profile     = "${var.profile}"
+//                                      })}"
+//}
 
 
 resource "aws_s3_bucket" "my_s3_bucket" {
@@ -265,39 +267,6 @@ resource "aws_iam_policy" "WebAppS3" {
 EOF
 }
 
-#resource "aws_iam_role" "EC2-CSYE6225" {
-#  name = "EC2-CSYE6225"
-#
-#  assume_role_policy = <<EOF
-#{
-#  "Version": "2012-10-17",
-#  "Statement": [
-#    {
-#      "Action": "sts:AssumeRole",
-#      "Principal": {
-#        "Service": "ec2.amazonaws.com"
-#      },
-#      "Effect": "Allow",
-#      "Sid": ""
-#    }
-#  ]
-#}
-#EOF
-#
-#  tags = {
-#    tag-key = "tag-value"
-#  }
-#}
-
-#resource "aws_iam_instance_profile" "my_iam_instance_profile" {
-#  name = "my_iam_instance_profile"
-#  role = "${aws_iam_role.EC2-CSYE6225.name}"
-#}
-
-#resource "aws_iam_role_policy_attachment" "test-attach" {
-#  role       = aws_iam_role.EC2-CSYE6225.name
-#  policy_arn = aws_iam_policy.WebAppS3.arn
-#}
 
 resource "aws_db_instance" "my_rds" {
   name                  = "${var.db_name}"
@@ -615,7 +584,7 @@ resource "aws_launch_configuration" "config_for_auto_scaling" {
   instance_type                     = "t2.micro"
   key_name                          = "${var.key_name}"
   associate_public_ip_address       = true
-  user_data                         = "${templatefile("/user_data.sh",
+  user_data                         = "${templatefile("user_data.sh",
                                       {
                                         s3_bucket_name  = "${aws_s3_bucket.my_s3_bucket.id}",
                                         aws_db_endpoint = "${aws_db_instance.my_rds.endpoint}",
@@ -625,14 +594,11 @@ resource "aws_launch_configuration" "config_for_auto_scaling" {
                                         aws_region      = "${var.region}",
                                         aws_profile     = "${var.profile}"
                                       })}"
+
   iam_instance_profile              = "${aws_iam_instance_profile.my_iam_instance_profile.name}"
   security_groups                   = ["${aws_security_group.application.id}"]
-  lifecycle {
-    create_before_destroy = true
-  }
 
-  ebs_block_device {
-    device_name               = "${var.device_name}"
+  root_block_device {
     volume_size               = "${var.volume_size}"
     volume_type               = "${var.volume_type}"
     delete_on_termination     = "${var.delete_on_termination}"
@@ -659,7 +625,6 @@ resource "aws_autoscaling_group" "auto_scale" {
 
   depends_on = ["aws_launch_configuration.config_for_auto_scaling",
     "aws_lb_target_group.auto_scale_target_group",
-    "aws_lb_listener.application_listener",
     "aws_lb_listener.http_listener"]
 }
 
@@ -674,7 +639,7 @@ resource "aws_autoscaling_policy" "scale_up_policy" {
   name                   = "scale_up_policy"
   scaling_adjustment     = "1"
   adjustment_type        = "ChangeInCapacity"
-  cooldown               = "60"
+  cooldown               = "30"
   autoscaling_group_name = "${aws_autoscaling_group.auto_scale.name}"
 }
 
@@ -682,7 +647,7 @@ resource "aws_autoscaling_policy" "scale_down_policy" {
   name                   = "scale_down_policy"
   scaling_adjustment     = "-1"
   adjustment_type        = "ChangeInCapacity"
-  cooldown               = "60"
+  cooldown               = "30"
   autoscaling_group_name = "${aws_autoscaling_group.auto_scale.name}"
 }
 
@@ -692,9 +657,9 @@ resource "aws_cloudwatch_metric_alarm" "CPUAlarmHigh" {
   evaluation_periods  = "2"
   metric_name         = "CPUUtilization"
   namespace           = "AWS/EC2"
-  period              = "300"
+  period              = "60"
   statistic           = "Average"
-  threshold           = "90"
+  threshold           = "5"
   dimensions = {
     AutoScalingGroupName = "${aws_autoscaling_group.auto_scale.name}"
   }
@@ -709,9 +674,9 @@ resource "aws_cloudwatch_metric_alarm" "CPUAlarmLow" {
   evaluation_periods  = "2"
   metric_name         = "CPUUtilization"
   namespace           = "AWS/EC2"
-  period              = "300"
+  period              = "60"
   statistic           = "Average"
-  threshold           = "70"
+  threshold           = "3"
   dimensions = {
     AutoScalingGroupName = "${aws_autoscaling_group.auto_scale.name}"
   }
@@ -728,28 +693,6 @@ resource "aws_lb" "application_lb" {
   ip_address_type    = "ipv4"
   enable_deletion_protection = false
 }
-
-
-data "aws_acm_certificate" "ssl_certificate" {
-  domain   = "${var.domain}"
-  statuses = ["ISSUED"]
-  most_recent = true
-}
-
-
-resource "aws_lb_listener" "application_listener" {
-  load_balancer_arn = "${aws_lb.application_lb.arn}"
-  port              = "443"
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-2016-08"
-  certificate_arn   = "${data.aws_acm_certificate.ssl_certificate.arn}"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = "${aws_lb_target_group.auto_scale_target_group.arn}"
-  }
-}
-
 
 resource "aws_lb_listener" "http_listener" {
   load_balancer_arn = "${aws_lb.application_lb.arn}"
@@ -768,30 +711,15 @@ resource "aws_security_group" "load_balancer_sg" {
   vpc_id            = "${aws_vpc.My_VPC.id}"
 
   ingress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "${var.aws_security_group_protocol}"
-    cidr_blocks     = ["0.0.0.0/0"]
-  }
-
-  ingress {
     from_port       = 80
     to_port         = 80
     protocol        = "${var.aws_security_group_protocol}"
     cidr_blocks     = ["0.0.0.0/0"]
   }
 
-  # HTTPS
   ingress {
     from_port       = 443
     to_port         = 443
-    protocol        = "${var.aws_security_group_protocol}"
-    cidr_blocks     = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port       = 8080
-    to_port         = 8080
     protocol        = "${var.aws_security_group_protocol}"
     cidr_blocks     = ["0.0.0.0/0"]
   }
@@ -804,3 +732,4 @@ resource "aws_security_group" "load_balancer_sg" {
   }
 
 }
+
