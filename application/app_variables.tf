@@ -152,8 +152,7 @@ variable "code_deploy_ec2_service_role_name" {
 variable "account_id" {
     type = string
 }
-variable "domain" {
-    type = string
+variable "timeToLive" {
+    type = number
 }
-
 # end of variables.tf

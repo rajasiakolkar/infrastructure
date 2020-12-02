@@ -9,4 +9,12 @@ sudo echo username=${aws_db_username} >> /etc/profile.d/envvariable.sh
 sudo echo "export username=${aws_db_username}" >> /etc/profile.d/envvariable.sh
 sudo echo password=${aws_db_password} >> /etc/profile.d/envvariable.sh
 sudo echo "export password=${aws_db_password}" >> /etc/profile.d/envvariable.sh
+sudo echo webapp_domain=${webapp_domain} >> /etc/profile.d/envvariable.sh
+sudo echo "export webapp_domain=${webapp_domain}" >> /etc/profile.d/envvariable.sh
+sudo echo sns_topic_arn=${sns_topic_arn} >> /etc/profile.d/envvariable.sh
+sudo echo "export sns_topic_arn=${sns_topic_arn}" >> /etc/profile.d/envvariable.sh
+sudo echo aws_profile=${aws_profile} >> /etc/profile.d/envvariable.sh
+sudo echo "export aws_profile=${aws_profile}" >> /etc/profile.d/envvariable.sh
+sudo echo aws_region=${aws_region} >> /etc/profile.d/envvariable.sh
+sudo echo "export aws_region=${aws_region}" >> /etc/profile.d/envvariable.sh
 chmod +x /etc/profile.d/envvariable.sh
