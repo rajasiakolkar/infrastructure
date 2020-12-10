@@ -102,8 +102,7 @@ resource "aws_security_group" "application" {
     from_port       = 22
     to_port         = 22
     protocol        = var.aws_security_group_protocol
-    security_groups = [
-      aws_security_group.load_balancer_sg.id]
+    security_groups = [aws_security_group.load_balancer_sg.id]
   }
 
 //  ingress {
@@ -126,8 +125,7 @@ resource "aws_security_group" "application" {
     from_port       = 8080
     to_port         = 8080
     protocol        = var.aws_security_group_protocol
-    security_groups = [
-      aws_security_group.load_balancer_sg.id]
+    security_groups = [aws_security_group.load_balancer_sg.id]
   }
 
   egress {
@@ -267,7 +265,18 @@ resource "aws_iam_policy" "WebAppS3" {
         }
 EOF
 }
-
+//
+//resource "aws_db_parameter_group" "rds" {
+//  name   = "rds-pg"
+//  family = "postgres12"
+//
+////  parameter {
+////    name  = "performance_schema"
+////    value = 1
+////    apply_method = "pending-reboot"
+////  }
+//
+//}
 
 resource "aws_db_instance" "my_rds" {
   name                  = var.db_name
@@ -280,9 +289,11 @@ resource "aws_db_instance" "my_rds" {
   password              = var.db_password
   db_subnet_group_name  = aws_db_subnet_group.rds-subnet.name
   publicly_accessible   = var.db_publicly_accessible
-  vpc_security_group_ids= [
-    aws_security_group.database.id]
+  storage_encrypted = true
+  vpc_security_group_ids= [aws_security_group.database.id]
   skip_final_snapshot   = var.db_skip_final_snapshot
+//  parameter_group_name = aws_db_parameter_group.rds.name
+//  performance_insights_enabled = true
 }
 
 resource "aws_db_subnet_group" "rds-subnet" {
@@ -566,7 +577,8 @@ data "aws_route53_zone" "selected" {
 resource "aws_route53_record" "dns_record" {
   zone_id = data.aws_route53_zone.selected.zone_id
   allow_overwrite = true
-  name    = "api.${data.aws_route53_zone.selected.name}"
+  name    = data.aws_route53_zone.selected.name
+  #name    = "api.${data.aws_route53_zone.selected.name}"
   type    = "A"
   #ttl     = "60"
   #records = ["${aws_instance.ec2_instance.public_ip}"]
@@ -713,10 +725,18 @@ resource "aws_lb" "application_lb" {
   enable_deletion_protection = false
 }
 
+data "aws_acm_certificate" "aws_ssl_certificate" {
+  domain = "${var.profile}.rajasiakolkar.me"
+  #types       = ["AMAZON_ISSUED"]
+  statuses = ["ISSUED"]
+  most_recent = true
+}
+
 resource "aws_lb_listener" "http_listener" {
   load_balancer_arn = aws_lb.application_lb.arn
-  port = "80"
-  protocol = "HTTP"
+  port = "443"
+  protocol = "HTTPS"
+  certificate_arn   = "${data.aws_acm_certificate.aws_ssl_certificate.arn}"
 
   default_action {
     type = "forward"
@@ -729,12 +749,12 @@ resource "aws_security_group" "load_balancer_sg" {
   description       = "Security group for load balancer"
   vpc_id            = aws_vpc.My_VPC.id
 
-  ingress {
-    from_port       = 80
-    to_port         = 80
-    protocol        = var.aws_security_group_protocol
-    cidr_blocks     = ["0.0.0.0/0"]
-  }
+//  ingress {
+//    from_port       = 80
+//    to_port         = 80
+//    protocol        = var.aws_security_group_protocol
+//    cidr_blocks     = ["0.0.0.0/0"]
+//  }
 
   ingress {
     from_port       = 443
